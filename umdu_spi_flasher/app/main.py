@@ -43,8 +43,8 @@ HTML_TEMPLATE = """
             • НЕ ПЕРЕЗАГРУЖАЙТЕ систему
         </div>
 
-        <form method="post">
-            <button type="submit" onclick="if(confirm('Вы уверены, что хотите перезаписать U-Boot?')){ this.disabled=true; this.textContent='Ожидайте... НЕ ВЫКЛЮЧАЙТЕ УСТРОЙСТВО!'; return true; } return false;">
+        <form method="post" onsubmit="document.querySelector('button').disabled=true; document.querySelector('button').textContent='Ожидайте... НЕ ВЫКЛЮЧАЙТЕ УСТРОЙСТВО!';">
+            <button type="submit" onclick="return confirm('Вы уверены, что хотите перезаписать U-Boot?')">
                 Перезаписать U-Boot в SPI
             </button>
         </form>
