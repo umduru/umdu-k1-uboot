@@ -71,9 +71,13 @@ HTML_TEMPLATE = """
                 btn.textContent = 'Ожидайте... НЕ ВЫКЛЮЧАЙТЕ УСТРОЙСТВО!';
                 btn.className = 'processing';
                 btn.disabled = true;
-                return true;
+                
+                // Отправляем форму
+                setTimeout(() => {
+                    btn.closest('form').submit();
+                }, 100);
             }
-            return false;
+            return false; // Предотвращаем стандартную отправку
         }
     </script>
 </body>
