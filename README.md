@@ -1,11 +1,5 @@
-# UMDU K1 Add-ons Repository
-
-Репозиторий дополнений Home Assistant для umdu k1.
-
-## Дополнения
-
-### UMDU SPI U-Boot Flasher
-Перезапись U-Boot в SPI flash памяти для umdu k1.
+# UMDU SPI U-Boot Flasher
+Перезапись U-Boot в SPI flash памяти для umdu k1 для umdu k1 для загрузки системы HAOS с USB накопителя.
 
 ## Установка
 
