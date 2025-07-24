@@ -1,6 +1,6 @@
 name: "UMDU SPI U-Boot Flasher"
 description: "Add-on для перезаписи U-Boot в SPI flash памяти"
-version: "0.9.5"
+version: "0.9.6"
 slug: "umdu_spi_flasher"
 init: false
 arch:

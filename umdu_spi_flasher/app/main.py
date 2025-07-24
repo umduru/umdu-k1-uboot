@@ -26,6 +26,7 @@ HTML_TEMPLATE = """
         .warning strong { color: #b7791f; }
         button { background: #007bff; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; margin: 10px 0; }
         button:hover { background: #0056b3; }
+        button:disabled { background: #ffc107; color: #856404; cursor: not-allowed; }
         .result { padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; }
         .success { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
@@ -43,7 +44,7 @@ HTML_TEMPLATE = """
         </div>
 
         <form method="post">
-            <button type="submit" onclick="return confirm('Вы уверены, что хотите перезаписать U-Boot?')">
+            <button type="submit" onclick="if(confirm('Вы уверены, что хотите перезаписать U-Boot?')){ this.disabled=true; this.textContent='Ожидайте... НЕ ВЫКЛЮЧАЙТЕ УСТРОЙСТВО!'; return true; } return false;">
                 Перезаписать U-Boot в SPI
             </button>
         </form>
