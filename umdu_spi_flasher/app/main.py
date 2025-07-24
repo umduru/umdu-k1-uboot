@@ -2,18 +2,13 @@
 import os
 import subprocess
 import logging
-from flask import Flask, render_template_string, request, jsonify
-import threading
-import time
+from flask import Flask, render_template_string, request
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-
-# Глобальные переменные для отслеживания состояния
-flash_status = {"running": False, "success": None, "message": ""}
 
 # HTML шаблон интерфейса
 HTML_TEMPLATE = """
@@ -31,14 +26,11 @@ HTML_TEMPLATE = """
         .warning strong { color: #b7791f; }
         button { background: #007bff; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; margin: 10px 0; }
         button:hover { background: #0056b3; }
-        button:disabled { background: #6c757d; cursor: not-allowed; }
-        .status { padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; }
-        .status.running { background: #d1ecf1; color: #0c5460; }
-        .status.success { background: #d4edda; color: #155724; }
-        .status.error { background: #f8d7da; color: #721c24; }
-        .hidden { display: none; }
-        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 10px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .result { padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; white-space: pre-wrap; text-align: left; }
     </style>
 </head>
 <body>
@@ -54,66 +46,28 @@ HTML_TEMPLATE = """
             Прерывание процесса может привести к неработоспособности устройства!
         </div>
 
-        <button id="flashBtn" onclick="startFlash()">Перезаписать U-Boot в SPI</button>
+        <form method="post">
+            <button type="submit" name="action" value="flash" onclick="return confirm('Вы уверены, что хотите перезаписать U-Boot? Процесс займет некоторое время и его нельзя прерывать!')">
+                Перезаписать U-Boot в SPI
+            </button>
+        </form>
         
-        <div id="status" class="status hidden">
-            <div id="statusText"></div>
+        {% if result %}
+        <div class="result {{ result.type }}">
+            {% if result.type == 'success' %}
+                ✅ {{ result.message }}
+            {% elif result.type == 'error' %}
+                ❌ {{ result.message }}
+            {% else %}
+                ℹ️ {{ result.message }}
+            {% endif %}
+            
+            {% if result.output %}
+            <pre>{{ result.output }}</pre>
+            {% endif %}
         </div>
+        {% endif %}
     </div>
-
-    <script>
-        function updateStatus() {
-            fetch('/status')
-                .then(response => response.json())
-                .then(data => {
-                    const statusDiv = document.getElementById('status');
-                    const statusText = document.getElementById('statusText');
-                    const flashBtn = document.getElementById('flashBtn');
-                    
-                    if (data.running) {
-                        statusDiv.className = 'status running';
-                        statusDiv.classList.remove('hidden');
-                        statusText.innerHTML = '<div class="spinner"></div>' + data.message + ' НЕ ВЫКЛЮЧАЙТЕ УСТРОЙСТВО!';
-                        flashBtn.disabled = true;
-                    } else if (data.success === true) {
-                        statusDiv.className = 'status success';
-                        statusDiv.classList.remove('hidden');
-                        statusText.innerHTML = '✅ Перезапись U-Boot завершена успешно!';
-                        flashBtn.disabled = false;
-                    } else if (data.success === false) {
-                        statusDiv.className = 'status error';
-                        statusDiv.classList.remove('hidden');
-                        statusText.innerHTML = '❌ Ошибка: ' + data.message;
-                        flashBtn.disabled = false;
-                    } else {
-                        statusDiv.classList.add('hidden');
-                        flashBtn.disabled = false;
-                    }
-                })
-                .catch(error => {
-                    console.error('Ошибка получения статуса:', error);
-                });
-        }
-
-        function startFlash() {
-            if (confirm('Вы уверены, что хотите перезаписать U-Boot? Процесс займет некоторое время и его нельзя прерывать!')) {
-                fetch('/flash', { method: 'POST' })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (!data.success) {
-                            alert('Ошибка запуска: ' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        alert('Ошибка запуска: ' + error);
-                    });
-            }
-        }
-
-        // Обновляем статус каждые 2 секунды
-        setInterval(updateStatus, 2000);
-        updateStatus(); // Начальная проверка
-    </script>
 </body>
 </html>
 """
@@ -121,54 +75,67 @@ HTML_TEMPLATE = """
 def run_command(cmd, description):
     """Выполняет команду и возвращает результат"""
     logger.info(f"Выполняется: {description}")
-    flash_status["message"] = description
     
-    result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
-    
-    if result.returncode != 0:
-        error_msg = result.stderr.strip() or result.stdout.strip() or "Неизвестная ошибка"
-        raise Exception(f"{description}: {error_msg}")
-    
-    return result.stdout.strip()
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, shell=True, timeout=120)
+        
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() or result.stdout.strip() or "Неизвестная ошибка"
+            raise Exception(f"{description}: {error_msg}")
+        
+        return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        raise Exception(f"{description}: превышено время ожидания (120 сек)")
 
 def flash_uboot():
     """Функция для выполнения перезаписи U-Boot"""
-    global flash_status
+    output_log = []
     
     try:
-        flash_status = {"running": True, "success": None, "message": "Начало процесса..."}
         logger.info("Начало процесса перезаписи U-Boot")
         
         # Шаг 1: Скачиваем U-Boot файл
-        run_command(
+        output_log.append("1. Скачивание U-Boot файла...")
+        result = run_command(
             'curl -L -o /tmp/u-boot-sunxi-with-spl.bin https://github.com/umduru/umdu-k1-uboot/raw/main/u-boot-sunxi-with-spl.bin',
-            'Скачивание U-Boot файла...'
+            'Скачивание U-Boot файла'
         )
+        output_log.append("   ✓ Файл скачан")
         
         # Шаг 2: Очищаем SPI flash
-        run_command(
-            'flash_erase /dev/mtd0 0 0',
-            'Очистка SPI flash памяти...'
-        )
+        output_log.append("2. Очистка SPI flash памяти...")
+        result = run_command('flash_erase /dev/mtd0 0 0', 'Очистка SPI flash')
+        output_log.append("   ✓ SPI flash очищен")
         
         # Шаг 3: Записываем U-Boot в SPI flash
-        run_command(
-            'flashcp -v /tmp/u-boot-sunxi-with-spl.bin /dev/mtd0',
-            'Запись U-Boot в SPI flash...'
-        )
+        output_log.append("3. Запись U-Boot в SPI flash...")
+        result = run_command('flashcp -v /tmp/u-boot-sunxi-with-spl.bin /dev/mtd0', 'Запись U-Boot')
+        output_log.append("   ✓ U-Boot записан")
         
         # Шаг 4: Синхронизируем
-        run_command('sync', 'Синхронизация...')
+        output_log.append("4. Синхронизация...")
+        run_command('sync', 'Синхронизация')
+        output_log.append("   ✓ Синхронизация завершена")
         
-        flash_status = {"running": False, "success": True, "message": "Перезапись завершена успешно"}
+        output_log.append("\n✅ ПЕРЕЗАПИСЬ U-BOOT ЗАВЕРШЕНА УСПЕШНО!")
         logger.info("Перезапись U-Boot завершена успешно")
+        
+        return {
+            "type": "success",
+            "message": "Перезапись U-Boot завершена успешно!",
+            "output": "\n".join(output_log)
+        }
             
-    except subprocess.TimeoutExpired:
-        flash_status = {"running": False, "success": False, "message": "Превышено время ожидания"}
-        logger.error("Превышено время ожидания выполнения команды")
     except Exception as e:
-        flash_status = {"running": False, "success": False, "message": str(e)}
+        error_msg = str(e)
+        output_log.append(f"\n❌ ОШИБКА: {error_msg}")
         logger.error(f"Ошибка перезаписи U-Boot: {e}")
+        
+        return {
+            "type": "error", 
+            "message": f"Ошибка: {error_msg}",
+            "output": "\n".join(output_log)
+        }
     finally:
         # Удаляем временный файл
         try:
@@ -176,27 +143,14 @@ def flash_uboot():
         except:
             pass
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/status')
-def status():
-    return jsonify(flash_status)
-
-@app.route('/flash', methods=['POST'])
-def flash():
-    global flash_status
+    result = None
     
-    if flash_status.get("running"):
-        return jsonify({"success": False, "message": "Процесс уже выполняется"})
+    if request.method == 'POST' and request.form.get('action') == 'flash':
+        result = flash_uboot()
     
-    # Запускаем процесс в отдельном потоке
-    thread = threading.Thread(target=flash_uboot)
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({"success": True, "message": "Процесс запущен"})
+    return render_template_string(HTML_TEMPLATE, result=result)
 
 if __name__ == '__main__':
     logger.info("Запуск UMDU SPI U-Boot Flasher")
