@@ -26,11 +26,12 @@ HTML_TEMPLATE = """
         .warning strong { color: #b7791f; }
         button { background: #007bff; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; margin: 10px 0; }
         button:hover { background: #0056b3; }
+        button.processing { background: #ffc107; color: #856404; cursor: not-allowed; }
+        button:disabled { cursor: not-allowed; }
         .result { padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; }
         .success { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
         .info { background: #d1ecf1; color: #0c5460; }
-        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; white-space: pre-wrap; text-align: left; }
     </style>
 </head>
 <body>
@@ -41,33 +42,40 @@ HTML_TEMPLATE = """
             <strong>⚠️ ВНИМАНИЕ!</strong><br>
             Во время выполнения операции:<br>
             • НЕ ВЫКЛЮЧАЙТЕ устройство<br>
-            • НЕ ОТКЛЮЧАЙТЕ питание<br>
-            • НЕ ПЕРЕЗАГРУЖАЙТЕ систему<br>
-            Прерывание процесса может привести к неработоспособности устройства!
+            • НЕ ПЕРЕЗАГРУЖАЙТЕ систему
         </div>
 
         <form method="post">
-            <button type="submit" name="action" value="flash" onclick="return confirm('Вы уверены, что хотите перезаписать U-Boot? Процесс займет некоторое время и его нельзя прерывать!')">
+            <button type="submit" name="action" value="flash" id="flashBtn" onclick="return startFlash()">
                 Перезаписать U-Boot в SPI
             </button>
         </form>
         
-        {% if result %}
-        <div class="result {{ result.type }}">
-            {% if result.type == 'success' %}
-                ✅ {{ result.message }}
-            {% elif result.type == 'error' %}
-                ❌ {{ result.message }}
-            {% else %}
-                ℹ️ {{ result.message }}
-            {% endif %}
-            
-            {% if result.output %}
-            <pre>{{ result.output }}</pre>
-            {% endif %}
-        </div>
-        {% endif %}
+                 {% if result %}
+         <div class="result {{ result.type }}">
+             {% if result.type == 'success' %}
+                 ✅ {{ result.message }}
+             {% elif result.type == 'error' %}
+                 ❌ {{ result.message }}
+             {% else %}
+                 ℹ️ {{ result.message }}
+             {% endif %}
+         </div>
+         {% endif %}
     </div>
+
+    <script>
+        function startFlash() {
+            if (confirm('Вы уверены, что хотите перезаписать U-Boot? Процесс займет некоторое время и его нельзя прерывать!')) {
+                const btn = document.getElementById('flashBtn');
+                btn.textContent = 'Ожидайте... НЕ ВЫКЛЮЧАЙТЕ УСТРОЙСТВО!';
+                btn.className = 'processing';
+                btn.disabled = true;
+                return true;
+            }
+            return false;
+        }
+    </script>
 </body>
 </html>
 """
@@ -89,52 +97,47 @@ def run_command(cmd, description):
 
 def flash_uboot():
     """Функция для выполнения перезаписи U-Boot"""
-    output_log = []
     
     try:
         logger.info("Начало процесса перезаписи U-Boot")
         
         # Шаг 1: Скачиваем U-Boot файл
-        output_log.append("1. Скачивание U-Boot файла...")
-        result = run_command(
+        logger.info("1. Скачивание U-Boot файла...")
+        run_command(
             'curl -L -o /tmp/u-boot-sunxi-with-spl.bin https://github.com/umduru/umdu-k1-uboot/raw/main/u-boot-sunxi-with-spl.bin',
             'Скачивание U-Boot файла'
         )
-        output_log.append("   ✓ Файл скачан")
+        logger.info("   ✓ Файл скачан")
         
         # Шаг 2: Очищаем SPI flash
-        output_log.append("2. Очистка SPI flash памяти...")
-        result = run_command('flash_erase /dev/mtd0 0 0', 'Очистка SPI flash')
-        output_log.append("   ✓ SPI flash очищен")
+        logger.info("2. Очистка SPI flash памяти...")
+        run_command('flash_erase /dev/mtd0 0 0', 'Очистка SPI flash')
+        logger.info("   ✓ SPI flash очищен")
         
         # Шаг 3: Записываем U-Boot в SPI flash
-        output_log.append("3. Запись U-Boot в SPI flash...")
-        result = run_command('flashcp -v /tmp/u-boot-sunxi-with-spl.bin /dev/mtd0', 'Запись U-Boot')
-        output_log.append("   ✓ U-Boot записан")
+        logger.info("3. Запись U-Boot в SPI flash...")
+        run_command('flashcp -v /tmp/u-boot-sunxi-with-spl.bin /dev/mtd0', 'Запись U-Boot')
+        logger.info("   ✓ U-Boot записан")
         
         # Шаг 4: Синхронизируем
-        output_log.append("4. Синхронизация...")
+        logger.info("4. Синхронизация...")
         run_command('sync', 'Синхронизация')
-        output_log.append("   ✓ Синхронизация завершена")
+        logger.info("   ✓ Синхронизация завершена")
         
-        output_log.append("\n✅ ПЕРЕЗАПИСЬ U-BOOT ЗАВЕРШЕНА УСПЕШНО!")
-        logger.info("Перезапись U-Boot завершена успешно")
+        logger.info("✅ ПЕРЕЗАПИСЬ U-BOOT ЗАВЕРШЕНА УСПЕШНО!")
         
         return {
-            "type": "success",
-            "message": "Перезапись U-Boot завершена успешно!",
-            "output": "\n".join(output_log)
+            "type": "success", 
+            "message": "Перезапись U-Boot завершена успешно!"
         }
             
     except Exception as e:
         error_msg = str(e)
-        output_log.append(f"\n❌ ОШИБКА: {error_msg}")
-        logger.error(f"Ошибка перезаписи U-Boot: {e}")
+        logger.error(f"❌ ОШИБКА: {error_msg}")
         
         return {
-            "type": "error", 
-            "message": f"Ошибка: {error_msg}",
-            "output": "\n".join(output_log)
+            "type": "error",
+            "message": f"Ошибка: {error_msg}"
         }
     finally:
         # Удаляем временный файл
