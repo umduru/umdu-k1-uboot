@@ -103,4 +103,7 @@ def index():
 
 if __name__ == '__main__':
     logger.info("Запуск UMDU SPI U-Boot Flasher")
+    # Отключаем предупреждения Flask
+    import logging as flask_logging
+    flask_logging.getLogger('werkzeug').setLevel(flask_logging.ERROR)
     app.run(host='0.0.0.0', port=8099, debug=False) 
