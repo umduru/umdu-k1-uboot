@@ -1,0 +1,24 @@
+name: "Umdu SPI U-Boot Flasher"
+description: "Add-on для перезаписи U-Boot в SPI flash памяти"
+version: "1.0"
+slug: "umdu_spi_flasher"
+init: false
+arch:
+  - aarch64
+startup: services
+boot: manual
+host_dbus: true
+hassio_api: true
+hassio_role: admin
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+full_access: true
+apparmor: false
+devices:
+  - /dev/mtd0
+options: {}
+schema: {}
+map:
+  - type: share
+    read_only: false 
