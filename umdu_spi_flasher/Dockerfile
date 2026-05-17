@@ -2,6 +2,7 @@ FROM ghcr.io/home-assistant/base:3.21
 
 ARG BUILD_VERSION="0.0.0"
 ARG BUILD_ARCH="aarch64"
+ARG ALPINE_MIRROR="https://mirror.yandex.ru/mirrors/alpine"
 
 LABEL \
     io.hass.version="${BUILD_VERSION}" \
@@ -15,7 +16,8 @@ LABEL \
     org.opencontainers.image.source="https://github.com/umduru/umdu-k1-uboot"
 
 # Установка необходимых пакетов для работы с SPI flash
-RUN apk add --no-cache \
+RUN printf '%s/v3.21/main\n%s/v3.21/community\n' "${ALPINE_MIRROR}" "${ALPINE_MIRROR}" > /etc/apk/repositories \
+    && apk add --no-cache \
     bash \
     curl \
     wget \
